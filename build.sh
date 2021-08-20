@@ -52,8 +52,8 @@ cmake --build . --parallel
 cd $TOP
 
 #rm -rf build
-mkdir -p build/dbg
-cd build/dbg
+mkdir -p build/opt
+cd build/opt
 
 cmake -GNinja -DCMAKE_MESSAGE_LOG_LEVEL=ERROR -DCMAKE_BUILD_TYPE=Release \
 -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
