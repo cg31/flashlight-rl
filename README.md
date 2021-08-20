@@ -7,4 +7,4 @@ Try it:
 
 2 run build.sh to build everything
 
-3 run binary under build/dbg or buildopt
+3 run binary under build/dbg or build/opt
