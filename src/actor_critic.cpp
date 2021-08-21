@@ -10,6 +10,7 @@
 #include "env/cartpole.h"
 
 #include "gather.h"
+#include "prob.h"
 
 
 const int epochs = 5000;
@@ -28,27 +29,6 @@ float vf_lr = 1e-3;
 int train_pi_iters = 80;
 int train_v_iters = 80;
 
-
-int multinomial(const fl::Variable &probs)
-{
-    std::random_device rd;
-    std::mt19937 rnd_gen(rd());
-    std::exponential_distribution<float> rng(1);
-
-    std::vector<float> dist;
-    int size = probs.elements();
-    dist.resize(size);
-    for (auto i=0; i < size; i++)
-        dist[i] = rng(rnd_gen);
-
-    auto q = af::array(probs.dims(), dist.data());
-    auto s = probs.array() / q;
-
-    af::array val, idx;
-    af::max(val, idx, s, 0);
-
-    return idx.scalar<unsigned>();
-}
 
 class Buffer
 {
@@ -175,7 +155,7 @@ public:
     auto step(const fl::Variable &state)
     {
         auto probs = actor.forward(state);
-        auto act = multinomial(probs);
+        auto act = multinomial(probs.array());
         auto logp = probs.row(act);
         auto val = value(state);
         return std::make_tuple(act, val.array(), logp.array());
