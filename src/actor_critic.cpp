@@ -40,68 +40,60 @@ public:
 
     void store(const af::array &obs, int act, float rew, const af::array &val, const af::array &logp)
     {
-        obs_buf.push_back(obs);
         act_buf.push_back(act);
         rew_buf.push_back(rew);
-        val_buf.push_back(val);
-        logp_buf.push_back(logp);
+
+        states = af::join(1, states, obs);
+        logps = af::join(1, logps, logp);
+        vals = af::join(1, vals, val);
     }
 
     auto get()
     {
-        int size = rew_buf.size();
+        int size = act_buf.size();
 
-        val_buf.push_back(af::constant(0.0f, 1));
+        vals = af::join(1, vals, af::constant(0.0f, 1));
 
-        std::vector<af::array> adv_buf(size);
-        auto last_gae_lam = af::constant(0.0f, 1);
+        af::array adv(1, size);
+        auto last_gae_adv = af::constant(0.0f, 1);
 
         // advantage estimates with GAE-Lambda
         for (int i = size - 1; i >= 0; i--)
         {
-            auto delta = rew_buf[i] + gamma * val_buf[i + 1] - val_buf[i];
-            last_gae_lam = delta + gamma * lam * last_gae_lam;
-            adv_buf[i] = last_gae_lam;
+            auto delta = rew_buf[i] + gamma * vals.col(i + 1) - vals.col(i);
+            last_gae_adv = delta + gamma * lam * last_gae_adv;
+            adv.col(i) = last_gae_adv;
         }
 
-        std::vector<af::array> ret_buf(size);
-        last_gae_lam = af::constant(0.0f, 1);
+        af::array ret(1, size);
+        auto last_gae_ret = af::constant(0.0f, 1);
 
         // advantage estimates with GAE-Lambda for ret
         for (int i = size - 1; i >= 0; i--)
         {
-            last_gae_lam = rew_buf[i] + gamma * last_gae_lam;
-            ret_buf[i] = last_gae_lam;
-        }
-
-        af::array obs, val, logp, adv, ret;
-
-        for (int i=0; i < size; i++)
-        {
-            obs = af::join(1, obs, obs_buf[i]);
-            val = af::join(1, val, val_buf[i]);
-            logp = af::join(1, logp, logp_buf[i]);
-            adv = af::join(1, adv, adv_buf[i]);
-            ret = af::join(1, ret, ret_buf[i]);
+            last_gae_ret = rew_buf[i] + gamma * last_gae_ret;
+            ret.col(i) = last_gae_ret;
         }
 
         auto act = af::array({1, size}, act_buf.data());
+
         auto mean = af::tile(af::mean(adv, {1}), adv.dims());
         auto stdtmp = af::stdev(adv, AF_VARIANCE_DEFAULT);
         auto stdev = af::tile(stdtmp, adv.dims());
 
         adv = (adv - mean) / stdev;
 
-        obs_buf.clear();
-        act_buf.clear();
-        rew_buf.clear();
-        val_buf.clear();
-        logp_buf.clear();
-
-        auto fobs = fl::Variable(obs, false);
+        auto fobs = fl::Variable(states, false);
         auto fact = fl::Variable(act, false);
         auto fret = fl::Variable(ret, false);
         auto fadv = fl::Variable(adv, false);
+
+        logps = af::array(1, 0);
+        states = af::array(1, 0);
+        vals = af::array(1, 0);
+
+        act_buf.clear();
+        rew_buf.clear();
 
         return std::make_tuple(fobs, act, fret, fadv);
     }
@@ -109,7 +101,7 @@ public:
 private:
     int obs_dim, act_dim;
     float gamma, lam;
-    std::vector<af::array> obs_buf, val_buf, logp_buf;
+    af::array states, logps, vals;
     std::vector<int> act_buf;
     std::vector<float> rew_buf;
 };
@@ -193,7 +185,7 @@ public:
         loss_pi.backward();
         pi_optimizer->step();
 
-        std::cout << " loss_pi = " << loss_pi.scalar<float>();
+        std::cout << " loss_pi: " << loss_pi.scalar<float>();
 
         // value function learning
         float loss_sum = 0;
@@ -210,7 +202,7 @@ public:
             loss_sum += loss_v.scalar<float>();
         }
 
-        std::cout << " loss_v = " << loss_sum / train_v_iters << std::endl;
+        std::cout << " loss_v: " << loss_sum / train_v_iters << std::endl;
     }
 
 private:
